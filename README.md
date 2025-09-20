@@ -1,59 +1,115 @@
-# AngularDocker
+# Dockerized Angular App
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.3.1.
+This project demonstrates how to run an **Angular application** inside a **Docker container**, supporting both **development** (with live reload) and **production** (served via Nginx) environments.
 
-## Development server
+---
 
-To start a local development server, run:
+## Table of Contents
 
-```bash
-ng serve
-```
+* [Prerequisites](#prerequisites)
+* [Development Setup](#development-setup)
+* [Production Setup](#production-setup)
+* [Dockerfile Overview](#dockerfile-overview)
+* [Ports](#ports)
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+---
 
-## Code scaffolding
+## Prerequisites
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+* [Docker](https://www.docker.com/get-started) installed
+* [Node.js](https://nodejs.org/) installed (optional, for local dev)
+* Angular project already created (`ng new <project-name>`)
 
-```bash
-ng generate component component-name
-```
+---
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Development Setup
 
-```bash
-ng generate --help
-```
+This setup allows live reloading of Angular code inside Docker.
 
-## Building
-
-To build the project run:
+1. **Build the Docker image:**
 
 ```bash
-ng build
+docker build -t angular-docker .
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+2. **Run the container with volume mounts:**
 
 ```bash
-ng test
+docker run -it -p 4200:4200 -v "$(pwd):/app" -v /app/node_modules angular-docker
 ```
 
-## Running end-to-end tests
+**Explanation of volume mounts:**
 
-For end-to-end (e2e) testing, run:
+* `-v "$(pwd):/app"` → Mounts your project files into the container for live reload.
+* `-v /app/node_modules` → Preserves container-installed dependencies.
+
+3. **Access the app in browser:**
+
+```
+http://localhost:4200
+```
+
+> ⚠️ Make sure the CMD in Dockerfile uses `--host 0.0.0.0`:
+
+```dockerfile
+CMD ["npm", "run", "start", "--", "--host", "0.0.0.0"]
+```
+
+---
+
+## Production Setup
+
+For production, build the Angular app and serve it using **Nginx**.
+
+1. **Multi-stage Dockerfile example:**
+
+```dockerfile
+# Stage 1: Build Angular app
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build -- --configuration production
+
+# Stage 2: Serve with Nginx
+FROM nginx:alpine
+COPY --from=build /app/dist/my-app /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+2. **Build and run production container:**
 
 ```bash
-ng e2e
+docker build -t angular-prod .
+docker run -d -p 80:80 angular-prod
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+3. **Access the app in browser:**
 
-## Additional Resources
+```
+http://localhost
+```
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+---
+
+## Dockerfile Overview
+
+* **Development:** Runs `ng serve` with `--host 0.0.0.0` for external access
+* **Production:** Multi-stage build, final stage serves compiled app via Nginx
+* **User permissions:** Optional `app` user for better security
+
+---
+
+## Ports
+
+| Environment | Container Port | Host Port |
+| ----------- | -------------- | --------- |
+| Development | 4200           | 4200      |
+| Production  | 80             | 80        |
+
+---
+
+This setup provides a **flexible way to run Angular in Docker** for both development and production use cases.
